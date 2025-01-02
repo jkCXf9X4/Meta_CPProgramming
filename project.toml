@@ -1,0 +1,23 @@
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Meta CPProgramming"
+version = "0.0.1"
+authors = [
+  { name="Erik Rosenlund" },
+]
+description = "Python package for preprocessing of C++ code"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/"
+Issues = "https://github.com/"
