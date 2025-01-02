@@ -4,6 +4,7 @@ public:
  int a;
 };
 
+//+serde(printf)
 class testLower {
 public:
  int b;
