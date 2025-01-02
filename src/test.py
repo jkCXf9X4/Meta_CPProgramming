@@ -4,6 +4,10 @@ from ctypes.util import find_library
 import ccsyspath
 import re
 
+# types
+# https://github.com/jiazhihao/clang/blob/master/bindings/python/clang/cindex.py ; 550
+
+
 
 def get_current_scope(cursor):
     """
@@ -39,7 +43,7 @@ def get_current_scope(cursor):
         return []
 
 
-def find_serializable_types(tu, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
+def find_serializable_types(tu : cl.TranslationUnit, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
     """
     Iterate through all tokens in the current TranslationalUnit looking for comments
     which match the match_str. If the comment match look for the next struct or
@@ -55,8 +59,9 @@ def find_serializable_types(tu, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
         - A List of SerdeRecords.
     """
     match_types = [cl.CursorKind.STRUCT_DECL, cl.CursorKind.CLASS_DECL]
-
-    tokens = tu.cursor.get_tokens()
+    
+    cursor : cl.Cursor = tu.cursor
+    tokens = cursor.get_tokens()
 
     found = False
     serializables = []
@@ -74,9 +79,10 @@ def find_serializable_types(tu, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
                 # to for the full C++ name.
                 name = "::".join(get_current_scope(cursor) + [cursor.spelling])
                 # Extract all of the fields (including access_specifiers)
+                t : cl.Type = cursor.type
                 fields = [
                     (field.spelling, field.type.spelling, field.access_specifier.name)
-                    for field in cursor.type.get_fields()
+                    for field in t.get_fields()
                 ]
 
                 serializables.append((name, fields, serdes))
