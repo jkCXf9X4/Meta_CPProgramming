@@ -6,42 +6,73 @@ import re
 # types
 # https://github.com/jiazhihao/clang/blob/master/bindings/python/clang/cindex.py ; 550
 
+
 class Macro:
     pass
 
-class FunctionMacro(Macro):
-    pass
 
-class ClassMacro(Macro):
-    pass
+class MacroDef:
+    def __init__(self, ast_node=None, token=None):
+        self.ast_node = ast_node
+        self.token = token
 
-class ReplacementMacro(Macro):
-    pass
+
+class FunctionMacroDef(MacroDef):
+    def __init__(self, ast_node=None, token=None):
+        super().__init__(ast_node=ast_node, token=token)
+
+        self.arguments = {}
+
+
+class ClassMacroDef(MacroDef):
+    def __init__(self, ast_node=None, token=None):
+        super().__init__(ast_node=ast_node, token=token)
+
+        self.functions = []
+        self.variables = []
+
+
+class ReplacementMacroDef(MacroDef):
+    def __init__(self, ast_node=None, token=None):
+        super().__init__(ast_node=ast_node, token=token)
+
+        self.replacement_text = None
+        self.new_text = None
+
+
+class CursorExt:
+    def __init__(self, node: cl.Cursor):
+        self.node: cl.Cursor = node
+        self.tokens = self.node.get_tokens()
+        self.arguments = self.node.get_arguments()
+
+        self.str_tokens = [x.spelling for x in self.tokens]
+        self.str_arguments = [x for x in self.arguments]
+
+    def is_macro(self):
+        return (
+            self.node.kind == cl.CursorKind.TEMPLATE_NON_TYPE_PARAMETER
+            and self.str_tokens
+            and self.str_tokens[0] == "macro"
+        )
+    
+    @property
+    def lexical_parent(self):
+        return CursorExt(self.node.lexical_parent)
+
+    def __str__(self):
+        return dedent(f"""
+        [line={self.node.location.line}, col={self.node.location.column}] 
+        Node: {self.node.spelling} Kind: {self.node.kind} Type: {self.node.type.spelling}
+        Arguments: {self.str_arguments}
+        Tokens: {self.str_tokens}
+        """).strip()
+
+    def str_level(self, level=0):
+        return f"{'-'*level} " + f"\n{' '*level} ".join(str(self).split("\n"))
 
 
 class MacroParser:
-    def print_tree(self):
-        self.print_next(self.tu.cursor)
-
-    def print_next(self, node: cl.Cursor, level=0):
-        """Find all references to the type named 'typename'"""
-
-        if level > 0:
-            tokens = node.get_tokens()
-            arguments = node.get_arguments()
-
-            print(
-                dedent(f"""
-                {'-'*level} [line={node.location.line}, col={node.location.column}] 
-                {' '*level} Node: {node.spelling} Kind: {node.kind} Type: {node.type.spelling}
-                {' '*level} Arguments: {[x for x in arguments]}
-                {' '*level} Tokens: {[x.spelling for x in tokens]}
-                """).strip()
-            )
-
-        for c in node.get_children():
-            self.print_next(c, level=level + 1)
-
     def __init__(self, path="temp.mpp", in_args=[], in_str="", options=0):
         print(f"{in_args=}")
 
@@ -66,11 +97,23 @@ class MacroParser:
             path, args=args, options=options, unsaved_files=unsaved_files
         )
 
-    def register_macro(self, m):
-        if type(m) in [list, set, tuple]:
-            self.macros += m
-        else:
-            self.macros.append(m)
+    def find_macros(self):
+        self.macros = self.find_next_macro(self.tu.cursor)
+
+    @classmethod
+    def find_next_macro(cls, node: cl.Cursor, level=0):
+        """Find all references to the type named 'typename'"""
+        
+        n = CursorExt(node)
+        # if level > 0:
+        #     print(n.str_level(level))            
+        
+        if n.is_macro():
+            print(f"Found {n.str_level(level)}")
+            print(f"Parent {n.lexical_parent}")
+           
+        for c in node.get_children():
+            cls.find_next_macro(c, level=level + 1)
 
     def get_current_scope(self, cursor: cl.Cursor):
         """

@@ -2,7 +2,7 @@
 template <macro trace_vars(i)>
 int function(int i)
 {
-        i = 6;
+        int j = 6;
         i = 2;
         return i;
 }

@@ -1,5 +1,5 @@
 
-template <derive debug(5), derive add_function>
+template <macro debug>
 class test_class_template
 {
 public:
