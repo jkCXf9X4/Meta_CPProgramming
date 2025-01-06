@@ -1,0 +1,11 @@
+
+class test_class_2
+{
+public:
+        int b;
+        float c;
+        test_class_2()
+        {
+        }
+};
+

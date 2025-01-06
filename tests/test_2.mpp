@@ -1,0 +1,12 @@
+
+template <derive debug(5), derive add_function>
+class test_class_template
+{
+public:
+        int b;
+        float c;
+        int get_int()
+        {
+                return b;
+        }
+};

@@ -15,3 +15,9 @@ https://stackoverflow.com/questions/42615806/using-clang-to-get-ast
 
 
 https://cwoodall.com/posts/2018-02-24-using-clang-and-python-to-generate-cpp-struct-serde-fns/
+
+https://eli.thegreenplace.net/2011/07/03/parsing-c-in-python-with-clang
+
+https://blog.logrocket.com/macros-in-rust-a-tutorial-with-examples/
+
+https://developerlife.com/2022/03/30/rust-proc-macro/
