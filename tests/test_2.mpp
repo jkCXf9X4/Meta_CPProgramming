@@ -9,4 +9,6 @@ public:
         {
                 return b;
         }
+
+        float get_float();
 };

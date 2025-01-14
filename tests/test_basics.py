@@ -1,16 +1,13 @@
 
-from src.macro_parser import MacroParser
+from src.macro_parser import parse_file
 
 
 
 def test_1():
-    macro_parser = MacroParser("test_1.mpp")
-    macro_parser.find_macros()
+    parse_file("test_1.mpp")
 
 def test_2():
-    macro_parser = MacroParser("test_2.mpp")
-    macro_parser.find_macros()
+    parse_file("test_2.mpp")
 
 def test_3():
-    macro_parser = MacroParser("test_3.mpp")
-    macro_parser.find_macros()
+    parse_file("test_3.mpp")

@@ -1,61 +1,94 @@
-import os
+from itertools import groupby
 from textwrap import dedent
 import clang.cindex as cl
-import re
+
+
+from src.default_macros import default_macros
 
 # types
 # https://github.com/jiazhihao/clang/blob/master/bindings/python/clang/cindex.py ; 550
 
 
 class Macro:
-    pass
+    def __init__(self, function, arguments=[], macro_node=None, macro_def_node=None):
+        self.function = function
+        self.arguments = arguments
+
+        self.macro_node: CursorExt = macro_node
+        self.macro_def_node: CursorExt = macro_def_node
+
+    def __str__(self):
+        return f"[Macro] {self.function.__name__} args{self.arguments}, {self.macro_node.node.spelling}"
 
 
-class MacroDef:
-    def __init__(self, ast_node=None, token=None):
-        self.ast_node = ast_node
-        self.token = token
+class TokenExt:
+    def __init__(self, tokens: list):
+        self.strings = tokens
 
+    def is_macro(self):
+        return self.strings != [] and self.strings[0] == "macro"
 
-class FunctionMacroDef(MacroDef):
-    def __init__(self, ast_node=None, token=None):
-        super().__init__(ast_node=ast_node, token=token)
+    def get_macro_atr(self):
+        macro_name = self.strings[1]
 
-        self.arguments = {}
+        arguments = []
+        if "(" in self.strings:
+            not_args = ["macro", macro_name, "(", ")", ","]
+            arguments = [x for x in self.strings if x not in not_args]
 
+        return macro_name, arguments
 
-class ClassMacroDef(MacroDef):
-    def __init__(self, ast_node=None, token=None):
-        super().__init__(ast_node=ast_node, token=token)
+    def codify(self):
+        tokens = self.strings.copy()
+        print(tokens)
 
-        self.functions = []
-        self.variables = []
+        if tokens[-1] not in ["}", ":"] and "class" not in tokens:
+            tokens.append(";")
 
+        i = 0
+        while i < len(tokens):
+            if tokens[i] in ["{", ":", ";"]:
+                tokens.insert(i + 1, "\n")
+            i += 1
 
-class ReplacementMacroDef(MacroDef):
-    def __init__(self, ast_node=None, token=None):
-        super().__init__(ast_node=ast_node, token=token)
-
-        self.replacement_text = None
-        self.new_text = None
+        print(tokens)
+        return " ".join(tokens)
 
 
 class CursorExt:
     def __init__(self, node: cl.Cursor):
         self.node: cl.Cursor = node
-        self.tokens = self.node.get_tokens()
-        self.arguments = self.node.get_arguments()
+        self.tokens = TokenExt([x.spelling for x in self.node.get_tokens()])
 
-        self.str_tokens = [x.spelling for x in self.tokens]
-        self.str_arguments = [x for x in self.arguments]
+        self.arguments = [x for x in self.node.get_arguments()]
 
     def is_macro(self):
-        return (
-            self.node.kind == cl.CursorKind.TEMPLATE_NON_TYPE_PARAMETER
-            and self.str_tokens
-            and self.str_tokens[0] == "macro"
+        macro_type = cl.CursorKind.TEMPLATE_NON_TYPE_PARAMETER
+        return self.node.kind == macro_type and self.tokens.is_macro()
+
+    def get_macro(self):
+        macro_name, arguments = self.tokens.get_macro_atr()
+        func = default_macros[macro_name]
+
+        return Macro(
+            function=func,
+            arguments=arguments,
+            macro_node=self.lexical_parent,
+            macro_def_node=self,
         )
-    
+
+    def to_code(self):
+        tokens = self.get_node_tokens()
+
+        out = f"{self.codify(tokens)}{{\n"
+        for c in self.get_children():
+            out += f"{self.codify(c.tokens.strings)}\n"
+        out += "}"
+        return out
+
+    def get_children(self):
+        return [CursorExt(c) for c in self.node.get_children()]
+
     @property
     def lexical_parent(self):
         return CursorExt(self.node.lexical_parent)
@@ -64,8 +97,8 @@ class CursorExt:
         return dedent(f"""
         [line={self.node.location.line}, col={self.node.location.column}] 
         Node: {self.node.spelling} Kind: {self.node.kind} Type: {self.node.type.spelling}
-        Arguments: {self.str_arguments}
-        Tokens: {self.str_tokens}
+        Arguments: {self.arguments}
+        Tokens: {self.tokens.strings}
         """).strip()
 
     def str_level(self, level=0):
@@ -85,7 +118,7 @@ class MacroParser:
 
         args = args + in_args  # + incargs
 
-        self.macros = []
+        self.macros: list[Macro] = []
 
         # If we are parsing from a string instead
         unsaved_files = None
@@ -98,22 +131,20 @@ class MacroParser:
         )
 
     def find_macros(self):
-        self.macros = self.find_next_macro(self.tu.cursor)
+        self.find_next_macro(self.tu.cursor)
 
-    @classmethod
-    def find_next_macro(cls, node: cl.Cursor, level=0):
+    def find_next_macro(self, node: cl.Cursor, level=0):
         """Find all references to the type named 'typename'"""
-        
+
         n = CursorExt(node)
         # if level > 0:
-        #     print(n.str_level(level))            
-        
+        print(n.str_level(level))
+
         if n.is_macro():
-            print(f"Found {n.str_level(level)}")
-            print(f"Parent {n.lexical_parent}")
-           
+            self.macros.append(n.get_macro())
+
         for c in node.get_children():
-            cls.find_next_macro(c, level=level + 1)
+            self.find_next_macro(c, level=level + 1)
 
     def get_current_scope(self, cursor: cl.Cursor):
         """
@@ -146,42 +177,53 @@ class MacroParser:
         else:
             return []
 
-    def find_serializable_types(self, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
-        match_types = [cl.CursorKind.STRUCT_DECL, cl.CursorKind.CLASS_DECL]
 
-        cursor: cl.Cursor = self.tu.cursor
-        tokens = cursor.get_tokens()
+def parse_file(file: str):
+    macro_parser = MacroParser(file)
+    macro_parser.find_macros()
 
-        found = False
-        serializables = []
+    print("\nFound:")
+    for m in macro_parser.macros:
+        print(m)
+        print(m.macro_node.get_node_tokens())
+        print(m.macro_node.to_code())
 
-        for token in tokens:
-            match = re.match(match_str, token.spelling)
-            if found:
-                cursor = cl.Cursor().from_location(self.tu, token.location)
-                if cursor.kind in match_types:
-                    full_name = "::".join(
-                        self.get_current_scope(cursor) + [cursor.spelling]
-                    )
+    # def find_serializable_types(self, match_str="//\+serde\(([A-Za-z\s,_]*)\)"):
+    #     match_types = [cl.CursorKind.STRUCT_DECL, cl.CursorKind.CLASS_DECL]
 
-                    t: cl.Type = cursor.type
-                    fields = [
-                        (
-                            field.spelling,
-                            field.type.spelling,
-                            field.access_specifier.name,
-                        )
-                        for field in t.get_fields()
-                    ]
+    #     cursor: cl.Cursor = self.tu.cursor
+    #     tokens = cursor.get_tokens()
 
-                    serializables.append((full_name, fields))
+    #     found = False
+    #     serializables = []
 
-                    # Start searching for more comments.
-                    found = False
-                    print(f"{serializables[-1]=}")
+    #     for token in tokens:
+    #         match = re.match(match_str, token.spelling)
+    #         if found:
+    #             cursor = cl.Cursor().from_location(self.tu, token.location)
+    #             if cursor.kind in match_types:
+    #                 full_name = "::".join(
+    #                     self.get_current_scope(cursor) + [cursor.spelling]
+    #                 )
 
-            elif (token.kind == cl.TokenKind.COMMENT) and match:
-                found = True
-                print(f"{match=}")
+    #                 t: cl.Type = cursor.type
+    #                 fields = [
+    #                     (
+    #                         field.spelling,
+    #                         field.type.spelling,
+    #                         field.access_specifier.name,
+    #                     )
+    #                     for field in t.get_fields()
+    #                 ]
 
-        return serializables
+    #                 serializables.append((full_name, fields))
+
+    #                 # Start searching for more comments.
+    #                 found = False
+    #                 print(f"{serializables[-1]=}")
+
+    #         elif (token.kind == cl.TokenKind.COMMENT) and match:
+    #             found = True
+    #             print(f"{match=}")
+
+    #     return serializables
