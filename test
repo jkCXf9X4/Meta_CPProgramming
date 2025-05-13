@@ -1,0 +1,8 @@
+
+bash -c "$(curl -fsSL https://raw.git
+
+https://community-scripts.github.io/ProxmoxVE/scripts?id=post-pve-install
+
+https://github.com/community-scripts/ProxmoxVE/tree/main/tools/pve
+
+bash -c "$(curl -fsSL https://github.com/community-scripts/ProxmoxVE/tree/main/tools/pve/post-pve-install.sh)"
